@@ -1,67 +1,105 @@
 import type React from "react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Toaster, toast } from "react-hot-toast";
+import ReactPaginate from "react-paginate";
+
 import styles from "./App.module.css";
+
 import SearchBar from "../SearchBar/SearchBar";
 import MovieGrid from "../MovieGrid/MovieGrid";
 import Loader from "../Loader/Loader";
 import ErrorMessage from "../ErrorMessage/ErrorMessage";
 import MovieModal from "../MovieModal/MovieModal";
+
 import { fetchMovies } from "../../services/movieService";
 import type { Movie } from "../../types/movie";
 
+interface MoviesQueryResponse {
+  movies: Movie[];
+  totalPages: number;
+}
+
 const App: React.FC = () => {
-  const [movies, setMovies] = useState<Movie[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(false);
+  const [query, setQuery] = useState<string>("");
+  const [page, setPage] = useState<number>(1);
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
 
-  const handleSearch = async (query: string) => {
-    setMovies([]);
-    setError(false);
+  const { data, isLoading, isError, isFetching, status } =
+    useQuery<MoviesQueryResponse>({
+      queryKey: ["movies", query, page],
+      queryFn: () => fetchMovies({ query, page }),
+      enabled: query.trim().length > 0,
+      staleTime: 1000 * 60 * 5,
+    });
 
-    if (!query.trim()) {
-      // Додатковий захист, основна перевірка в SearchBar
-      toast.error("Please enter your search query.");
-      return;
+  useEffect(() => {
+    if (
+      status === "success" &&
+      data &&
+      query.trim().length > 0 &&
+      data.movies.length === 0
+    ) {
+      toast.error("No movies found for your request.");
     }
+  }, [status, data, query]);
 
-    setIsLoading(true);
-
-    try {
-      const results = await fetchMovies({ query });
-
-      if (results.length === 0) {
-        toast.error("No movies found for your request.");
-      }
-
-      setMovies(results);
-    } catch {
-      setError(true);
+  useEffect(() => {
+    if (isError) {
       toast.error("There was an error, please try again...");
-    } finally {
-      setIsLoading(false);
     }
+  }, [isError]);
+
+  const movies: Movie[] = data?.movies ?? [];
+  const totalPages: number = data?.totalPages ?? 0;
+
+  const handleSearch = (searchQuery: string): void => {
+    setQuery(searchQuery);
+    setPage(1);
+    setSelectedMovie(null);
   };
 
-  const handleSelectMovie = (movie: Movie) => {
+  const handleSelectMovie = (movie: Movie): void => {
     setSelectedMovie(movie);
   };
 
-  const handleCloseModal = () => {
+  const handleCloseModal = (): void => {
     setSelectedMovie(null);
   };
+
+  const handlePageChange = ({ selected }: { selected: number }): void => {
+    setPage(selected + 1);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const showLoader = isLoading || isFetching;
 
   return (
     <>
       <SearchBar onSubmit={handleSearch} />
+
       <main className={styles.main}>
-        {isLoading && <Loader />}
+        {showLoader && <Loader />}
 
-        {!isLoading && error && <ErrorMessage />}
+        {!showLoader && isError && <ErrorMessage />}
 
-        {!isLoading && !error && movies.length > 0 && (
-          <MovieGrid movies={movies} onSelect={handleSelectMovie} />
+        {!showLoader && !isError && movies.length > 0 && (
+          <>
+            {totalPages > 1 && (
+              <ReactPaginate
+                pageCount={totalPages}
+                pageRangeDisplayed={5}
+                marginPagesDisplayed={1}
+                onPageChange={handlePageChange}
+                forcePage={page - 1}
+                containerClassName={styles.pagination}
+                activeClassName={styles.active}
+                nextLabel="→"
+                previousLabel="←"
+              />
+            )}
+            <MovieGrid movies={movies} onSelect={handleSelectMovie} />
+          </>
         )}
 
         {selectedMovie && (

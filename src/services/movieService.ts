@@ -25,7 +25,7 @@ if (!tmdbToken) {
 export async function fetchMovies({
   query,
   page = 1,
-}: FetchMoviesParams): Promise<Movie[]> {
+}: FetchMoviesParams): Promise<{ movies: Movie[]; totalPages: number }> {
   const url = `${BASE_URL}${SEARCH_MOVIE_ENDPOINT}`;
 
   const config = {
@@ -42,5 +42,8 @@ export async function fetchMovies({
 
   const response = await axios.get<MoviesResponse>(url, config);
 
-  return response.data.results;
+  return {
+    movies: response.data.results,
+    totalPages: response.data.total_pages,
+  };
 }
